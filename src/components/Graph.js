@@ -1,15 +1,21 @@
 
 import React, { useEffect, useState } from 'react';
+import { Button, Dropdown, Layout, Menu } from 'antd';
+
 import * as propTypes from 'prop-types';
 import * as d3 from 'd3';
 
+const { SubMenu } = Menu;
+const { Header, Content, Sider } = Layout;
+
+let currentZoomTransform = {};
 
 let firstRender = true;
 
 const WIDTH = 1500;
 const HEIGHT = 1000;
 const WIDTH_ICON = 60;
-const SIZE_NODE = 150;
+const SIZE_NODE = 250;
 const SMALL_DEVIATION = WIDTH_ICON * 3;
 
 const lines_init = [
@@ -48,6 +54,8 @@ let previousNodes = [];
 let simulation = null;
 
 let newNodesCollapsedState = {};
+
+let listGraph = []
 
 function getNodesPos(nodes) {
   const nodesPos = {};
@@ -95,9 +103,71 @@ function addInclination(currentPositions, newPos) {
   return newPosition;
 }
 
-function Graph({ links: linksProps, images, nodes: nodesProps, onClick, onDoubleClick }) {
+function getMenuFromtListGraph(element) {
+  if (element.children.length) {
+    return(<SubMenu key={element.id} title={element.originalName}>
+      {element.children.map((elementChild) => getMenuFromtListGraph(elementChild))}
+    </SubMenu>)
+  }
+  return (<Menu.Item key={element.id}>{element.originalName}</Menu.Item>);
+}
+
+function Graph({ links: linksProps, images, nodes: nodesProps, onClick, onDoubleClick, width, height }) {
   const [resetGraph, setResetGraph] = useState(false);
   const [state, setState] = useState({ nodes: nodesProps, lines: linksProps, nodesPos: getNodesPos(nodesProps)  });
+
+  const addChildToListGraph = (elem, parents, child, listResponses = []) => {
+    if (!elem.children.length) {
+      if (parents.includes(elem.id)) {
+        elem.children.push({ ...child, children: [] });
+      }
+      listResponses.push(elem.id);
+      return listResponses;
+    }
+    if (parents.includes(elem.id)) {
+      const exist = elem.children.some((elemChild) => elemChild.id === child.id);
+      if (!exist) elem.children.push({ ...child, children: [] });
+      listResponses.push(elem.id);
+      return listResponses;
+    }
+    elem.children.forEach((childElem) => {
+      return addChildToListGraph(childElem, parents, child, listResponses);
+    })
+  }
+
+  const initializeListOfGraph = () => {
+    const { lines, nodes, nodesPos } = state;
+
+    listGraph = [];
+
+    const nodesWithoutParent = nodes.filter((node) => !lines.some((line) => line.target === node.id));
+
+    const nodesToCheck = [];
+    let nodesVisited = [];
+    nodesWithoutParent.forEach((node) => {
+      if (!nodesToCheck.includes(node.id)) {
+        nodesToCheck.push(node.id);
+        listGraph.push({ ...node, children: [] });
+      }
+    });
+
+    while(nodesToCheck.length) {
+      const nodeChecked = nodesToCheck.shift();
+      const nodesIdChildren = lines.filter((line) => line.source === nodeChecked).map((line) => line.target);
+      nodesIdChildren.forEach((nodeIdChild) => {
+        const child = nodes.find((node) => node.id === nodeIdChild);
+        const parents = lines.filter((line) => line.target === nodeIdChild).map((line) => line.source);
+        listGraph.forEach((nodeListGraph) => {
+          addChildToListGraph(nodeListGraph, parents, child);
+        });
+        if (!nodesVisited.includes(nodeIdChild)) nodesToCheck.push(nodeIdChild);
+      });
+      nodesVisited.push(nodeChecked);
+    }
+  }
+
+  if (!listGraph.length) { initializeListOfGraph(); }
+  const menu = (listGraph.map((element) => getMenuFromtListGraph(element)));
 
   localState = JSON.parse(JSON.stringify(state));
 
@@ -266,8 +336,8 @@ function Graph({ links: linksProps, images, nodes: nodesProps, onClick, onDouble
           let column = 0;
           simulation.nodes().forEach((nodeSimulation) => {
             const { id } = nodeSimulation;
-            const xDistance = WIDTH / 5;
-            const yDistance = HEIGHT / 5;
+            const xDistance = width / 5;
+            const yDistance = height / 5;
             if (listMainNodes.includes(id)) {
               nodeSimulation.x = xDistance * row;
               nodeSimulation.y = yDistance / column;
@@ -281,27 +351,27 @@ function Graph({ links: linksProps, images, nodes: nodesProps, onClick, onDouble
 
         simulation.nodes().forEach((node) => {
           if (node.id === firstNodeMoreLinks.id) {
-            node.x = WIDTH / 3;
-            node.y = HEIGHT / 3;
+            node.x = width / 3;
+            node.y = height / 3;
           } else if (node.id === secondNodeMoreLinks.id) {
-            node.x = (WIDTH / 3) * 2;
-            node.y = (HEIGHT / 3) + SMALL_DEVIATION;
+            node.x = (width / 3) * 2;
+            node.y = (height / 3) + SMALL_DEVIATION;
           } else if (node.id === secondNodeMoreLinks.id) {
-            node.x = (WIDTH / 3);
-            node.y = (HEIGHT / 3) * 2 + SMALL_DEVIATION;
+            node.x = (width / 3);
+            node.y = (height / 3) * 2 + SMALL_DEVIATION;
           } else if (node.id === secondNodeMoreLinks.id) {
-            node.x = (WIDTH / 3) * 2;
-            node.y = (HEIGHT / 3) * 2 + SMALL_DEVIATION;
+            node.x = (width / 3) * 2;
+            node.y = (height / 3) * 2 + SMALL_DEVIATION;
           }
         });
       } else {
         simulation.nodes().forEach((node) => {
           if (node.id === firstNodeMoreLinks.id) {
-            node.x = WIDTH / 3;
-            node.y = HEIGHT / 2;
+            node.x = width / 3;
+            node.y = height / 2;
           } else if (node.id === secondNodeMoreLinks.id) {
-            node.x = (WIDTH / 3) * 2;
-            node.y = HEIGHT / 2 + SMALL_DEVIATION;
+            node.x = (width / 3) * 2;
+            node.y = height / 2 + SMALL_DEVIATION;
           }
         });
       }
@@ -361,13 +431,18 @@ function Graph({ links: linksProps, images, nodes: nodesProps, onClick, onDouble
     simulation.restart();
   }
 
+  const handleZoom = (e) => {
+    currentZoomTransform = e.transform;
+    d3.select('svg g')
+      .attr('transform', e.transform);
+  };
+
   const drawGraph = () => {
     const { lines, nodes, nodesPos } = state;
+    initializeListOfGraph();
+
     const svg = d3.select('svg g');
-    const handleZoom = (e) => {
-      d3.select('svg g')
-        .attr('transform', e.transform);
-    }
+
     const zoom = d3.zoom().on('zoom', handleZoom);
 
     d3.select('svg').call(zoom).on("dblclick.zoom", null);
@@ -378,6 +453,20 @@ function Graph({ links: linksProps, images, nodes: nodesProps, onClick, onDouble
       .append('text')
       .attr('alignment-baseline', 'middle')
       .text(node => node.originalName || node.name || node.id)
+      .on("click", (d) => {
+        navigator.clipboard.writeText(d.currentTarget.__data__.id);
+      })
+    ;
+
+    const secondText = svg
+      .selectAll('secondText')
+      .data(nodes)
+      .enter()
+      .append('text')
+      .attr('alignment-baseline', 'middle')
+      .attr('stroke', 'grey')
+      .attr('font-weight', '100')
+      .text(node => node.secondLabel)
       .on("click", (d) => {
         navigator.clipboard.writeText(d.currentTarget.__data__.id);
       })
@@ -401,6 +490,7 @@ function Graph({ links: linksProps, images, nodes: nodesProps, onClick, onDouble
       .append('line')
       .attr('class', 'arrow')
       .attr('stroke', 'black')
+      .attr('opacity', '0.5')
       .attr('marker-end', (d) => "url(#arrow)")//attach the arrow from defs
       .style( "stroke-width", 3 );
 
@@ -471,7 +561,9 @@ function Graph({ links: linksProps, images, nodes: nodesProps, onClick, onDouble
         .attr('cx', node => node.x)
         .attr('cy', node => node.y);
       text
-        .attr('x', node => node.x + (WIDTH_ICON / 2)).attr('y', node => node.y);
+        .attr('x', node => node.x + (WIDTH_ICON / 2) + 5).attr('y', node => node.y - 15);
+      secondText
+        .attr('x', node => node.x + (WIDTH_ICON / 2) + 5).attr('y', node => node.y + 10);
       links.attr('x1',link => {
         return (nodes[nodesPos[link.source]] && nodes[nodesPos[link.source]].x);
       })
@@ -528,13 +620,44 @@ function Graph({ links: linksProps, images, nodes: nodesProps, onClick, onDouble
   }, [resetGraph]);
 
   return (
-    <div>
-      { !resetGraph && (
-        <svg width={WIDTH} height={HEIGHT}>
-          <g></g>
-        </svg>
-      )}
-    </div>
+    <Layout>
+      <Sider width={500} className="site-layout-background">
+        <Menu
+          mode="inline"
+          defaultSelectedKeys={['1']}
+          defaultOpenKeys={['sub1']}
+          style={{ height: '100%', borderRight: 0 }}
+          onClick={(selectedElement) => {
+            const { key } = selectedElement;
+            const nodeSelected = state.nodes.find((node) => node.id === parseInt(key,10));
+            const newPosition = {
+              x: nodeSelected.x,
+              y: nodeSelected.y,
+              k: 1
+            }
+            handleZoom({ transform: newPosition });
+          }}
+        >
+          {menu}
+        </Menu>
+      </Sider>
+      <Layout>
+        <Header theme="light">
+          <Dropdown overlay={menu} placement="bottomCenter">
+            <Button>List nodes</Button>
+          </Dropdown>
+        </Header>
+        <Content>
+          { !resetGraph && (
+            <svg width={width} height={height}>
+              <g></g>
+            </svg>
+          )}
+        </Content>
+
+      </Layout>
+
+    </Layout>
   );
 }
 
@@ -544,6 +667,8 @@ Graph.propTypes = {
   nodes: propTypes.array.isRequired,
   onClick: propTypes.func.isRequired,
   onDoubleClick: propTypes.func.isRequired,
+  width: propTypes.number,
+  height: propTypes.number
 }
 
 Graph.defaultProps = {
@@ -552,6 +677,8 @@ Graph.defaultProps = {
   links: lines_init,
   onClick: () => {},
   onDoubleClick: () => {},
+  width: WIDTH,
+  height: HEIGHT,
 }
 
 export default Graph;

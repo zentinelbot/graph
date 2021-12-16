@@ -2,24 +2,15 @@
 import React, { useState } from 'react';
 import Graph from './components/Graph';
 
+
 function App() {
+
   const localNodes = [
     {
       id: 100,
       image: 'proceso',
       originalName: 'Nombre1',
       secondLabel: 'label2'
-    },
-    {
-      id: 101,
-      image: 'nodo',
-      originalName: 'Nombre2',
-      secondLabel: 'label21'
-    },
-    {
-      id: 102,
-      image: 'nodo',
-      originalName: 't_kpfm_reclassification_raw'
     },
     {
       id: 1,
@@ -34,16 +25,8 @@ function App() {
   ];
   const localLinks = [
     {
-      source: 100,
-      target: 101
-    },
-    {
-      source: 102,
-      target: 100
-    },
-    {
-      source: 100,
-      target: 1,
+      source: 1,
+      target: 100,
     },
     {
       source: 2,
@@ -80,6 +63,8 @@ function App() {
         */
       }}
       nodes={JSON.parse(JSON.stringify(nodes))}
+      width={window.innerWidth - 50}
+      height={window.innerHeight - 100}
     />
   );
 }
